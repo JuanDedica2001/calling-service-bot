@@ -11,14 +11,22 @@ const meetingLinkInput = document.getElementById('teams-link-input');
 const hangUpButton = document.getElementById('hang-up-button');
 const teamsMeetingJoinButton = document.getElementById('join-meeting-button');
 const callStateElement = document.getElementById('call-state');
-const recordingStateElement = document.getElementById('recording-state');
-const accessToken = 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjVFODQ4MjE0Qzc3MDczQUU1QzJCREU1Q0NENTQ0ODlEREYyQzRDODQiLCJ4NXQiOiJYb1NDRk1kd2M2NWNLOTVjelZSSW5kOHNUSVEiLCJ0eXAiOiJKV1QifQ.eyJza3lwZWlkIjoiYWNzOjQ4OWViMTc0LTc5YWEtNDY1Ni1iZjg4LTRiMDZhMDgyNjllMl8wMDAwMDAxOC1hMjJhLTExZDAtNjNiMi1hNDNhMGQwMDBjOTAiLCJzY3AiOjE3OTIsImNzaSI6IjE2ODM2NjU0ODEiLCJleHAiOjE2ODM3NTE4ODEsInJnbiI6ImFtZXIiLCJhY3NTY29wZSI6InZvaXAiLCJyZXNvdXJjZUlkIjoiNDg5ZWIxNzQtNzlhYS00NjU2LWJmODgtNGIwNmEwODI2OWUyIiwicmVzb3VyY2VMb2NhdGlvbiI6InVuaXRlZHN0YXRlcyIsImlhdCI6MTY4MzY2NTQ4MX0.jSc8DmtwlgEXvWdlfPSaD0RxEprMLCW5xXgG4Mw4HD7gikDaOWd6O9V3pMMh7xBXEMwWx-WM5uLxe2-h8GDCh1Ap2q5Voa43rXqQlzBwWL1oWEKxNqp-m6ZuXjoXvMUGs5n7jLrZ_OAG8nUjNvH_9k9AGKHkdTutj5A4LUzH777Zfu8t4jR_mvec1RuSgUromHyLrIKdPAoxPgm0sDkGap9Cw16FpHiGvnqbkqtn3exzeg5xvkuZHUmlah6sW5BszDR99SxC3aT1jiBzNmIvlEQutJCeIcNeHYyGwiCU5DPeClUM0CTrsLBcZ9wiqm-siSgPM6F54Y74BPyEa3BbwA';
+const accessToken = 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjEwNiIsIng1dCI6Im9QMWFxQnlfR3hZU3pSaXhuQ25zdE5PU2p2cyIsInR5cCI6IkpXVCJ9.eyJza3lwZWlkIjoiYWNzOjQ4OWViMTc0LTc5YWEtNDY1Ni1iZjg4LTRiMDZhMDgyNjllMl8wMDAwMDAxOC1hNzYwLTAxMzQtMjhkZi00NDQ4MjIwMDJhZmMiLCJzY3AiOjE3OTIsImNzaSI6IjE2ODM3NTI5MDEiLCJleHAiOjE2ODM4MzkzMDEsInJnbiI6ImFtZXIiLCJhY3NTY29wZSI6InZvaXAiLCJyZXNvdXJjZUlkIjoiNDg5ZWIxNzQtNzlhYS00NjU2LWJmODgtNGIwNmEwODI2OWUyIiwicmVzb3VyY2VMb2NhdGlvbiI6InVuaXRlZHN0YXRlcyIsImlhdCI6MTY4Mzc1MjkwMX0.iK8VpJIkqRbVRVxdWuhfQlrIWWc7ssjPKrGkb0nrkY5lWl55nYFZsR3SfvkdQNdjmUM82wstw6skUaEJBPvuuE1M8RnYXSseUSDyH4wp0a03uro9nvzAY0r_L_di1JbNNikOftEoqyDBsNBfZrmj3t7N1_YTwML_HUyBq0FH1A7eMLmYjQ7cUSEVktFVIWhwiknDFnzhVlTg3y_dqs07ABYVDIeE9_Olez8XFWjZMcnAj3OnWYuOkBfbyncV-hcbRrrAZauJ-9oj9_4RXCYFZhRA4bl9ULNCZ79S52EsTRLm2_NFyyhmv9aaPi292n4MG6zKJWtS5A7FXqvioZAFlw';
+let samples = [];
+const sampleRate = 16000;
+const channelCount = 1;
+const bitsPerSample = 16;
+let intervalId;
 async function init() {
     const callClient = new CallClient();
     const tokenCredential = new AzureCommunicationTokenCredential(accessToken);
     callAgent = await callClient.createCallAgent(tokenCredential, {displayName: 'Test user'});
     teamsMeetingJoinButton.disabled = false;
 }
+
+
+
+
 init();
 
 AzureLogger.log = (...args) => {
@@ -39,12 +47,27 @@ teamsMeetingJoinButton.addEventListener('click', () => {
     // join with meeting link
     call = callAgent.join({meetingLink: meetingLinkInput.value}, {});
     call.on('stateChanged', async () => {
-        callStateElement.innerText = call.state;    
-        console.log({call: call.state});
-        console.log({call: call});
+        callStateElement.innerText = call.state;
+        let chunkSize = sampleRate * channelCount * bitsPerSample / 8;
+        if (call.state === 'Connected') {
+        intervalId = setInterval(() => {
+          if (samples.length >= chunkSize) {
+            let chunk = samples.splice(0, chunkSize);
+    
+            // Encode chunk as a little-endian, 16-bit, signed integer array
+            let buffer = new ArrayBuffer(chunk.length * 2);
+            let view = new DataView(buffer);
+            for (let i = 0; i < chunk.length; i++) {
+              view.setInt16(i * 2, chunk[i], true /* little endian */);
+            }
+    
+            // Send chunk to the WebSocket server
+            socket.send(buffer);
+          }
+        }, 20);
+      }
     });
     call.on('remoteAudioStreamsUpdated', async e => {
-        console.log({e});
         const remoteAudioStream = e.added[0];
         const mediaStream = await remoteAudioStream.getMediaStream();
             // Create a new AudioContext
@@ -54,26 +77,23 @@ teamsMeetingJoinButton.addEventListener('click', () => {
             const scriptNode = audioContext.createScriptProcessor(4096, 1, 1);
             
             // create audio buffer
-            const buffer = new ArrayBuffer(64000);
-            const audioData = new Int16Array(buffer);
+            // const audioData = new Int16Array(buffer);
             
             // connect script processor node to audio context
-            scriptNode.connect(audioContext.destination);
             
             // process audio data
             scriptNode.onaudioprocess = (event) => {
-              const inputBuffer = event.inputBuffer.getChannelData(0);
-              for (let i = 0; i < inputBuffer.length; i++) {
-                audioData[i] = inputBuffer[i] * 32767;
-              }
-              if(socket.readyState === WebSocket.OPEN) {
-                  socket.send(audioData.buffer);
+              let input = event.inputBuffer.getChannelData(0);
+              for (let i = 0; i < input.length; i++) {
+                let sample = Math.round(input[i] * 0x7FFF);
+                samples.push(sample);
               }
             };
             
             // start audio processing
             const mediaStreamSource = audioContext.createMediaStreamSource(mediaStream);
             mediaStreamSource.connect(scriptNode);
+            scriptNode.connect(audioContext.destination);
 
     hangUpButton.disabled = false;
     teamsMeetingJoinButton.disabled = true;
@@ -103,4 +123,5 @@ socket.onerror = error => {
     }
 socket.onclose = () => {
     console.log(`[close] Connection closed`);
+    clearInterval(intervalId);
     }
