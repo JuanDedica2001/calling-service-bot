@@ -41,44 +41,40 @@ teamsMeetingJoinButton.addEventListener('click', () => {
     call.on('stateChanged', async () => {
         callStateElement.innerText = call.state;    
         console.log({call: call.state});
+        console.log({call: call});
     });
     call.on('remoteAudioStreamsUpdated', async e => {
         console.log({e});
         const remoteAudioStream = e.added[0];
         const mediaStream = await remoteAudioStream.getMediaStream();
             // Create a new AudioContext
-    const audioContext = new AudioContext();
+            const audioContext = new AudioContext({sampleRate: 16000});
 
-    // Create a MediaStreamAudioSourceNode from the remote audio stream
-    const sourceNode = audioContext.createMediaStreamSource(mediaStream);
+            // create script processor node
+            const scriptNode = audioContext.createScriptProcessor(4096, 1, 1);
+            
+            // create audio buffer
+            const buffer = new ArrayBuffer(64000);
+            const audioData = new Int16Array(buffer);
+            
+            // connect script processor node to audio context
+            scriptNode.connect(audioContext.destination);
+            
+            // process audio data
+            scriptNode.onaudioprocess = (event) => {
+              const inputBuffer = event.inputBuffer.getChannelData(0);
+              for (let i = 0; i < inputBuffer.length; i++) {
+                audioData[i] = inputBuffer[i] * 32767;
+              }
+              if(socket.readyState === WebSocket.OPEN) {
+                  socket.send(audioData.buffer);
+              }
+            };
+            
+            // start audio processing
+            const mediaStreamSource = audioContext.createMediaStreamSource(mediaStream);
+            mediaStreamSource.connect(scriptNode);
 
-    // Create an AnalyserNode to get the frequency data
-    const analyserNode = audioContext.createAnalyser();
-    sourceNode.connect(analyserNode);
-
-    analyserNode.fftSize = 2048;
-    analyserNode.smoothingTimeConstant = 0.8;
-
-    // Create a Uint8Array to store the frequency data
-    const frequencyData = new Uint16Array(analyserNode.frequencyBinCount);
-
-    // Schedule a callback function to update the frequency data and process the audio in real-time
-    function update() {
-        // Get the frequency data using getByteFrequencyData() method
-        analyserNode.getByteFrequencyData(frequencyData);
-        // Do something with the frequency data, e.g. visualize it
-        // ...
-        const audioBuffer = new Int16Array(frequencyData.buffer);
-        if(socket.readyState === 1) {   
-            socket.send(Buffer.from(audioBuffer));
-        }
-        // Schedule the next update
-        requestAnimationFrame(update);
-    }
-
-    // Start the real-time processing
-    update();
-    // toggle button states
     hangUpButton.disabled = false;
     teamsMeetingJoinButton.disabled = true;
 });
@@ -94,7 +90,6 @@ teamsMeetingJoinButton.addEventListener('click', () => {
     }`;
     socket.send(data_to_send);
     // Start sending audio data to the server
-    
 
 };
 // Stop sending audio data and close the WebSocket after 10 seconds

@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "start": "npx webpack-dev-server --entry ./src/client.js --output bundle.js --debug --devtool inline-source-map"
+  },
   "dependencies": {
     "@azure/communication-calling": "^1.12.1",
     "@azure/communication-common": "^2.2.0"
